@@ -1,11 +1,11 @@
-/// Demo simulation provider: Jaipur ride (JECRC University → Poornima University).
+/// Demo simulation provider: Jaipur ride (JECRC University → Poornima Institute).
 ///
 /// Simulates:
-///   1. Moving along realistic road waypoints in Sitapura / Jaipur.
+///   1. Moving position along realistic road coordinates in Sitapura / Jaipur.
 ///   2. Realistic speed variations (20 - 48 km/h).
-///   3. Turn announcements at 500m and 100m before maneuvers.
-///   4. Pothole hazard warning alert at 40% of route.
-///   5. Phase 3 accident risk zone predictive warning at 70% of route.
+///   3. Voice turn announcements at 500m and 100m marks.
+///   4. One hazard alert (Pothole on Tonk Road at ~40% of route).
+///   5. One Phase 3 predictive risk warning (Sitapura High Risk Zone at ~70%).
 ///   6. Seamless transition to Ride Summary upon arrival.
 
 import 'dart:async';
@@ -18,7 +18,7 @@ import '../../../models/telemetry_models.dart';
 import '../../hazards/providers/hazard_providers.dart';
 import '../../voice/services/voice_service.dart';
 
-/// Predefined waypoint on the Jaipur demo route
+/// Predefined waypoint on the Jaipur demo route (JECRC → Poornima)
 class DemoWaypoint {
   const DemoWaypoint({
     required this.lat,
@@ -28,6 +28,7 @@ class DemoWaypoint {
     required this.distanceToNextTurnMeters,
     required this.remainingDistanceMeters,
     required this.instruction,
+    this.voiceAnnouncement,
     this.hazardAlert,
     this.riskZoneAlert,
   });
@@ -39,12 +40,15 @@ class DemoWaypoint {
   final double distanceToNextTurnMeters;
   final double remainingDistanceMeters;
   final String instruction;
+  final String? voiceAnnouncement;
   final HazardType? hazardAlert;
   final String? riskZoneAlert;
 }
 
 final isDemoRunningProvider = StateProvider<bool>((ref) => false);
+final isDemoPausedProvider = StateProvider<bool>((ref) => false);
 final demoCurrentWaypointIndexProvider = StateProvider<int>((ref) => 0);
+final demoVoiceSubtitleProvider = StateProvider<String>((ref) => '');
 
 final demoWaypoints = <DemoWaypoint>[
   // 1. Depart JECRC University Gate
@@ -55,7 +59,8 @@ final demoWaypoints = <DemoWaypoint>[
     direction: TurnDirection.straight,
     distanceToNextTurnMeters: 600,
     remainingDistanceMeters: 3800,
-    instruction: 'Head straight on RIICO Industrial Area Road',
+    instruction: 'Depart JECRC University. Head straight on RIICO Road.',
+    voiceAnnouncement: 'Starting navigation to Poornima Institute. Head straight.',
   ),
   // 2. Approaching Tonk Road turn (500m alert)
   const DemoWaypoint(
@@ -63,9 +68,10 @@ final demoWaypoints = <DemoWaypoint>[
     lng: 75.8040,
     speedKmh: 38,
     direction: TurnDirection.right,
-    distanceToNextTurnMeters: 480,
+    distanceToNextTurnMeters: 500,
     remainingDistanceMeters: 3300,
     instruction: 'In 500 metres, turn right onto Tonk Road',
+    voiceAnnouncement: 'In 500 metres, turn right onto Tonk Road.',
   ),
   // 3. Final turn approach (100m alert)
   const DemoWaypoint(
@@ -76,27 +82,30 @@ final demoWaypoints = <DemoWaypoint>[
     distanceToNextTurnMeters: 100,
     remainingDistanceMeters: 2800,
     instruction: 'Turn right onto Tonk Road',
+    voiceAnnouncement: 'Turn right onto Tonk Road.',
   ),
   // 4. On Tonk Road — Hazard encounter: Pothole alert at 40%
   const DemoWaypoint(
     lat: 26.8610,
     lng: 75.7890,
-    speedKmh: 42,
+    speedKmh: 44,
     direction: TurnDirection.straight,
     distanceToNextTurnMeters: 1100,
     remainingDistanceMeters: 2200,
     instruction: 'Continue straight on Tonk Road for 1.1 km',
+    voiceAnnouncement: 'Pothole reported 300 metres ahead. Slow down.',
     hazardAlert: HazardType.pothole,
   ),
   // 5. Passing Pothole — "Still there?" prompt
   const DemoWaypoint(
     lat: 26.8630,
     lng: 75.7830,
-    speedKmh: 34,
+    speedKmh: 35,
     direction: TurnDirection.straight,
     distanceToNextTurnMeters: 750,
     remainingDistanceMeters: 1700,
-    instruction: 'Continue straight towards Sanganer Crossing',
+    instruction: 'Continue straight towards Sitapura Circle',
+    voiceAnnouncement: 'Continue straight towards Sitapura Circle.',
   ),
   // 6. At 70%: Phase 3 Accident Risk Zone Warning Trigger
   const DemoWaypoint(
@@ -107,20 +116,21 @@ final demoWaypoints = <DemoWaypoint>[
     distanceToNextTurnMeters: 420,
     remainingDistanceMeters: 1100,
     instruction: 'Slight left onto Sitapura Circle',
-    riskZoneAlert:
-        'Caution: Entering high accident risk zone. Multiple night collisions reported near this crossing.',
+    voiceAnnouncement: 'Warning! High accident risk zone ahead. Multiple night collisions reported near this crossing.',
+    riskZoneAlert: 'High accident risk zone ahead. Multiple incidents reported near this crossing at night.',
   ),
-  // 7. Approaching Poornima University turn
+  // 7. Approaching Poornima Institute turn (100m alert)
   const DemoWaypoint(
     lat: 26.8720,
     lng: 75.7680,
-    speedKmh: 26,
+    speedKmh: 24,
     direction: TurnDirection.left,
-    distanceToNextTurnMeters: 120,
+    distanceToNextTurnMeters: 100,
     remainingDistanceMeters: 450,
-    instruction: 'In 100 metres, turn left towards Poornima University',
+    instruction: 'In 100 metres, turn left towards Poornima Institute',
+    voiceAnnouncement: 'In 100 metres, turn left towards Poornima Institute.',
   ),
-  // 8. Arrived at Poornima University
+  // 8. Arrived at Poornima Institute
   const DemoWaypoint(
     lat: 26.8764,
     lng: 75.7640,
@@ -128,7 +138,8 @@ final demoWaypoints = <DemoWaypoint>[
     direction: TurnDirection.arrive,
     distanceToNextTurnMeters: 0,
     remainingDistanceMeters: 0,
-    instruction: 'You have arrived at Poornima University',
+    instruction: 'You have arrived at Poornima Institute',
+    voiceAnnouncement: 'You have arrived at your destination: Poornima Institute.',
   ),
 ];
 
@@ -138,20 +149,25 @@ class DemoSimulationController {
   final Ref _ref;
   Timer? _timer;
   int _currentIndex = 0;
+  void Function()? _onFinishedCallback;
 
   void startSimulation({required void Function() onFinished}) {
     _currentIndex = 0;
+    _onFinishedCallback = onFinished;
     _ref.read(isDemoRunningProvider.notifier).state = true;
+    _ref.read(isDemoPausedProvider.notifier).state = false;
     _ref.read(demoCurrentWaypointIndexProvider.notifier).state = 0;
 
     _updateStateForWaypoint(demoWaypoints[0]);
 
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 4), (timer) {
+      if (_ref.read(isDemoPausedProvider)) return;
+
       _currentIndex++;
       if (_currentIndex >= demoWaypoints.length) {
         stopSimulation();
-        onFinished();
+        _onFinishedCallback?.call();
         return;
       }
 
@@ -162,14 +178,39 @@ class DemoSimulationController {
     });
   }
 
+  void togglePause() {
+    final current = _ref.read(isDemoPausedProvider);
+    _ref.read(isDemoPausedProvider.notifier).state = !current;
+  }
+
+  void advanceToNextStep() {
+    if (_currentIndex + 1 < demoWaypoints.length) {
+      _currentIndex++;
+      _ref.read(demoCurrentWaypointIndexProvider.notifier).state = _currentIndex;
+      _updateStateForWaypoint(demoWaypoints[_currentIndex]);
+    } else {
+      stopSimulation();
+      _onFinishedCallback?.call();
+    }
+  }
+
+  void skipToEnd() {
+    _currentIndex = demoWaypoints.length - 1;
+    _ref.read(demoCurrentWaypointIndexProvider.notifier).state = _currentIndex;
+    _updateStateForWaypoint(demoWaypoints[_currentIndex]);
+    stopSimulation();
+    _onFinishedCallback?.call();
+  }
+
   void stopSimulation() {
     _timer?.cancel();
     _timer = null;
     _ref.read(isDemoRunningProvider.notifier).state = false;
+    _ref.read(isDemoPausedProvider.notifier).state = false;
   }
 
   void _updateStateForWaypoint(DemoWaypoint wp) {
-    // Update global ride state
+    // 1. Update global ride state
     _ref.read(rideStateProvider.notifier).updateState(
           RideState(
             isRiding: wp.speedKmh > 0,
@@ -180,32 +221,23 @@ class DemoSimulationController {
             distanceToNextStepMeters: wp.distanceToNextTurnMeters,
             currentLat: wp.lat,
             currentLng: wp.lng,
-            rideStartTime: DateTime.now().subtract(const Duration(minutes: 6)),
+            rideStartTime: DateTime.now().subtract(const Duration(minutes: 9)),
             phoneTouchCount: 0, // Zero touches throughout ride
           ),
         );
 
-    // Hazard trigger check
-    if (wp.hazardAlert != null) {
-      final hazard = HazardReport(
-        id: 'DEMO_HAZ_POTHOLE',
-        type: wp.hazardAlert!,
-        latitude: wp.lat + 0.001,
-        longitude: wp.lng + 0.001,
-        reportedAt: DateTime.now(),
-        reportedBy: 'demo_fleet',
-        confirmations: 6,
-        isVerified: true,
-      );
-      // Trigger voice warning
-      final voice = _ref.read(voiceServiceProvider);
-      voice.announceHazard(wp.hazardAlert!, 300);
-    }
+    // 2. Set Voice Subtitle
+    final voiceText = wp.voiceAnnouncement ?? wp.instruction;
+    _ref.read(demoVoiceSubtitleProvider.notifier).state = voiceText;
 
-    // Risk zone alert trigger
-    if (wp.riskZoneAlert != null) {
-      final voice = _ref.read(voiceServiceProvider);
-      voice.announceRiskZone('high');
+    // 3. Play Speech Announcement
+    final voice = _ref.read(voiceServiceProvider);
+    if (wp.hazardAlert != null) {
+      voice.announceHazard(wp.hazardAlert!, 300);
+    } else if (wp.riskZoneAlert != null) {
+      voice.announceRiskMessage(wp.voiceAnnouncement!);
+    } else if (wp.voiceAnnouncement != null) {
+      voice.speak(wp.voiceAnnouncement!);
     }
   }
 }

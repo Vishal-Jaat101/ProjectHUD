@@ -1,11 +1,13 @@
-/// DemoScreen — Simulated ride in Jaipur (JECRC → Poornima).
+/// DemoScreen — Simulated ride in Jaipur (JECRC University → Poornima Institute).
 ///
 /// Features:
-///   - Clearly labels "SIMULATED RIDE" in accordance with guidelines.
-///   - Pre-ride briefing with route map summary.
-///   - Live HUD view driving through the simulated route.
-///   - Triggers turn announcements, pothole alert, and Phase 3 risk warning.
-///   - Fast forward & End Demo controls.
+///   - Route playback with moving position along Jaipur coordinates.
+///   - Real-time varying speed (20-48 km/h).
+///   - Voice turn announcements (500m & 100m marks).
+///   - One crowd-verified hazard alert (Pothole at 40%).
+///   - One Phase 3 predictive risk warning (Sitapura High Risk Zone at 70%).
+///   - Interactive playback controls: Play/Pause, Fast-Forward Step, Skip to Summary.
+///   - Automatic seamless transition to Ride Summary upon arrival.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +16,8 @@ import 'package:go_router/go_router.dart';
 import '../../../app/constants/app_constants.dart';
 import '../../../app/providers/app_providers.dart';
 import '../../../app/theme/app_theme.dart';
+import '../../../models/hazard_models.dart';
+import '../../../models/navigation_models.dart';
 import '../../hud/widgets/eta_strip_widget.dart';
 import '../../hud/widgets/hazard_banner_widget.dart';
 import '../../hud/widgets/speed_display_widget.dart';
@@ -56,132 +60,195 @@ class _DemoScreenState extends ConsumerState<DemoScreen> {
   @override
   Widget build(BuildContext context) {
     final isRunning = ref.watch(isDemoRunningProvider);
+    final isPaused = ref.watch(isDemoPausedProvider);
     final wpIndex = ref.watch(demoCurrentWaypointIndexProvider);
+    final voiceSubtitle = ref.watch(demoVoiceSubtitleProvider);
     final currentWp = demoWaypoints[wpIndex];
-    final rideState = ref.watch(rideStateProvider);
+    final controller = ref.read(demoControllerProvider);
 
     if (!_hasStarted) {
       return _buildBriefingScreen();
     }
+
+    final progress = (wpIndex + 1) / demoWaypoints.length;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Stack(
           children: [
-            // ── Top Bar: Simulated Status & Controls ────────────────────
+            // ── Top Bar: Simulated Status, Voice Subtitles & Playback Controls ──
             Positioned(
-              top: 12,
-              left: 20,
-              right: 20,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              top: 8,
+              left: 16,
+              right: 16,
+              child: Column(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.panel,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: AppColors.amber),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.science_outlined,
-                          color: AppColors.amber,
-                          size: 16,
+                  // Row: Simulated Badge + Action Controls
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
                         ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'SIMULATED GPS: JAIPUR',
-                          style: AppTypography.caption.copyWith(
-                            color: AppColors.amber,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
+                        decoration: BoxDecoration(
+                          color: AppColors.panel,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppColors.amber),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.science_outlined,
+                              color: AppColors.amber,
+                              size: 15,
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              'SIMULATED RIDE: JECRC → POORNIMA',
+                              style: AppTypography.caption.copyWith(
+                                color: AppColors.amber,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Play/Pause button
+                          IconButton(
+                            icon: Icon(
+                              isPaused ? Icons.play_arrow : Icons.pause,
+                              color: AppColors.amber,
+                              size: 22,
+                            ),
+                            tooltip: isPaused ? 'Resume' : 'Pause',
+                            onPressed: controller.togglePause,
                           ),
-                        ),
-                      ],
+                          // Fast-Forward Step button
+                          IconButton(
+                            icon: const Icon(
+                              Icons.skip_next,
+                              color: AppColors.textPrimary,
+                              size: 22,
+                            ),
+                            tooltip: 'Next Waypoint',
+                            onPressed: controller.advanceToNextStep,
+                          ),
+                          // Close/Exit
+                          IconButton(
+                            icon: const Icon(Icons.close, color: AppColors.textSecondary, size: 22),
+                            onPressed: _stopAndExit,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+
+                  // Route Progress Bar
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      backgroundColor: AppColors.panel,
+                      valueColor: const AlwaysStoppedAnimation<Color>(AppColors.amber),
+                      minHeight: 3,
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: AppColors.textSecondary),
-                    onPressed: _stopAndExit,
-                  ),
+
+                  // Spoken Voice Subtitle Banner (HUD Assistant live voice readout)
+                  if (voiceSubtitle.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.panel.withOpacity(0.95),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.amber.withOpacity(0.4)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.volume_up_rounded,
+                            color: AppColors.amber,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              voiceSubtitle,
+                              style: AppTypography.bodySmall.copyWith(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  // Phase 3 Predictive Alert Banner at Step 6 (70% route mark)
+                  if (currentWp.riskZoneAlert != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.danger.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.danger, width: 1.5),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.warning_amber_rounded,
+                            color: AppColors.danger,
+                            size: 24,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'PHASE 3 ACCIDENT RISK WARNING',
+                                  style: AppTypography.caption.copyWith(
+                                    color: AppColors.danger,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  currentWp.riskZoneAlert!,
+                                  style: AppTypography.bodySmall.copyWith(
+                                    color: AppColors.textPrimary,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
 
-            // ── Center Simulation Events Display ────────────────────────
-            Positioned(
-              top: 80,
-              left: 24,
-              right: 24,
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.panel.withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'STEP ${wpIndex + 1} OF ${demoWaypoints.length}',
-                          style: AppTypography.caption.copyWith(
-                            color: AppColors.amber,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        Text(
-                          'JECRC → POORNIMA',
-                          style: AppTypography.caption.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      currentWp.instruction,
-                      style: AppTypography.bodySmall.copyWith(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    if (currentWp.riskZoneAlert != null) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.danger.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppColors.danger),
-                        ),
-                        child: Text(
-                          '⚠️ PHASE 3 PREDICTION TRIGGERED',
-                          style: AppTypography.caption.copyWith(
-                            color: AppColors.danger,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
+            // ── Center View: Intentionally empty for clear visor/road sightline ──
 
-            // ── Lower Third: Pure HUD Guidance ──────────────────────────
+            // ── Lower Third: Pure HUD Guidance (Arrow, Distance, Speed, ETA) ──
             Align(
               alignment: Alignment.bottomCenter,
               child: Container(
@@ -189,23 +256,25 @@ class _DemoScreenState extends ConsumerState<DemoScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Hazard alert if active at this waypoint
+                    // Hazard alert if active at this waypoint (Pothole at Step 4)
                     if (currentWp.hazardAlert != null) ...[
                       HazardBannerWidget(
                         hazard: HazardReport(
-                          id: 'DEMO_HAZ',
+                          id: 'DEMO_HAZ_POTHOLE',
                           type: currentWp.hazardAlert!,
                           latitude: currentWp.lat,
                           longitude: currentWp.lng,
                           reportedAt: DateTime.now(),
-                          reportedBy: 'fleet',
+                          reportedBy: 'fleet_consensus',
+                          confirmations: 6,
+                          isVerified: true,
                         ),
                         distanceMeters: 300,
                       ),
                       const SizedBox(height: 12),
                     ],
 
-                    // Primary Guidance Row
+                    // Primary Guidance Row: Turn Arrow + Distance & Speed
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       crossAxisAlignment: CrossAxisAlignment.end,
@@ -228,6 +297,27 @@ class _DemoScreenState extends ConsumerState<DemoScreen> {
                       remainingDistanceMeters: currentWp.remainingDistanceMeters,
                       remainingDurationSeconds:
                           currentWp.remainingDistanceMeters / 8.0,
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    // Quick Jump to Summary button
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.fast_forward, color: AppColors.textSecondary, size: 16),
+                        label: Text(
+                          'SKIP TO SUMMARY',
+                          style: AppTypography.caption.copyWith(
+                            color: AppColors.textSecondary,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        onPressed: () {
+                          controller.skipToEnd();
+                          context.go('/ride-summary');
+                        },
+                      ),
                     ),
                   ],
                 ),
@@ -276,7 +366,7 @@ class _DemoScreenState extends ConsumerState<DemoScreen> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'TABLETOP EVALUATION MODE — SIMULATED GPS & SEEDED DATA',
+                        'TABLETOP EVALUATION MODE — SIMULATED GPS & ROUTE PLAYBACK',
                         style: AppTypography.caption.copyWith(
                           color: AppColors.amber,
                           fontWeight: FontWeight.bold,
@@ -310,7 +400,7 @@ class _DemoScreenState extends ConsumerState<DemoScreen> {
                     _buildRouteLeg(
                       icon: Icons.radio_button_checked,
                       title: 'JECRC University',
-                      subtitle: 'RIICO Industrial Area, Sitapura',
+                      subtitle: 'Plot No. IS-2036, Ramchandrapura, Sitapura',
                       color: AppColors.amber,
                     ),
                     Padding(
@@ -323,8 +413,8 @@ class _DemoScreenState extends ConsumerState<DemoScreen> {
                     ),
                     _buildRouteLeg(
                       icon: Icons.location_on,
-                      title: 'Poornima University',
-                      subtitle: 'ISI-2, RIICO Institutional Area',
+                      title: 'Poornima Institute',
+                      subtitle: 'ISI-2, RIICO Institutional Area, Sitapura',
                       color: AppColors.verified,
                     ),
                     const SizedBox(height: 16),
@@ -363,11 +453,11 @@ class _DemoScreenState extends ConsumerState<DemoScreen> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    _buildHighlightItem('Turn alerts at 500m & 100m marks'),
-                    _buildHighlightItem('Dynamic GPS speed updates (20-48 km/h)'),
-                    _buildHighlightItem('Verified Pothole hazard warning alert'),
-                    _buildHighlightItem('Phase 3 Predictive Accident-Risk Zone warning'),
-                    _buildHighlightItem('Full post-ride safety summary (Phone touches: 0)'),
+                    _buildHighlightItem('Moving GPS position & dynamic speed variations (20 - 48 km/h)'),
+                    _buildHighlightItem('Voice turn announcements (at 500m & 100m marks)'),
+                    _buildHighlightItem('One verified Pothole hazard warning alert (Tonk Road)'),
+                    _buildHighlightItem('One Phase 3 Predictive Accident-Risk Zone warning (Sitapura)'),
+                    _buildHighlightItem('Full post-ride summary (Distance, Time, Avg Speed, Phone touches: 0)'),
                   ],
                 ),
               ),

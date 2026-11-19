@@ -49,7 +49,11 @@ class HomeScreen extends ConsumerWidget {
 
               // ── 3. "Where to?" Card ────────────────────────────
               _WhereToCard(isEnglish: isEnglish),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
+
+              // ── Quick Demo Mode Hero Card ──────────────────────
+              _DemoHeroCard(isEnglish: isEnglish),
+              const SizedBox(height: 16),
 
               // ── 4. Recent Destinations ──────────────────────────
               Expanded(
@@ -206,6 +210,107 @@ class _WhereToCard extends StatelessWidget {
               style: AppTypography.bodyLarge.copyWith(
                 color: AppColors.textSecondary,
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Quick Demo Mode Hero Card ───────────────────────────────────────────
+
+class _DemoHeroCard extends StatelessWidget {
+  const _DemoHeroCard({required this.isEnglish});
+
+  final bool isEnglish;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => context.push('/demo'),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.panel,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.amber, width: 1.5),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.amber.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.play_arrow_rounded,
+                color: AppColors.amber,
+                size: 26,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'DEMO MODE (JAIPUR)',
+                        style: AppTypography.caption.copyWith(
+                          color: AppColors.amber,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.verified.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'PITCH READY',
+                          style: AppTypography.caption.copyWith(
+                            color: AppColors.verified,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 9,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'JECRC University → Poornima Institute',
+                    style: AppTypography.bodySmall.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Simulated ride with turns, pothole hazard & Phase 3 risk warning',
+                    style: AppTypography.caption.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right,
+              color: AppColors.amber,
+              size: 22,
             ),
           ],
         ),

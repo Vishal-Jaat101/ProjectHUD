@@ -218,7 +218,7 @@ class VoiceService {
       if (_language.startsWith('hi')) {
         await speak('खतरनाक ज़ोन। सावधान रहें।', language: 'hi-IN');
       } else {
-        await speak('High risk zone. Stay alert.', language: 'en-IN');
+        await speak('Warning! High accident risk zone ahead. Multiple incidents reported.', language: 'en-IN');
       }
     } else if (riskLevel >= 0.5) {
       if (_language.startsWith('hi')) {
@@ -228,6 +228,11 @@ class VoiceService {
       }
     }
     // riskLevel < 0.5 — no announcement (don't distract the rider)
+  }
+
+  /// Direct spoken alert for custom risk zone warning text
+  Future<void> announceRiskMessage(String message) async {
+    await speak(message);
   }
 
   // ── Hazard Confirmation Prompt ──────────────────────────────────

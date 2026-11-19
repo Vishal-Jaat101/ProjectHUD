@@ -177,33 +177,65 @@ class RideSummaryScreen extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'COMMUNITY ROAD SAFETY IMPACT',
-                      style: AppTypography.caption.copyWith(
-                        color: AppColors.amber,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'COMMUNITY HAZARDS & SAFETY',
+                          style: AppTypography.caption.copyWith(
+                            color: AppColors.amber,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          'JECRC → POORNIMA',
+                          style: AppTypography.caption.copyWith(
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
+                    const Row(
+                      children: [
+                        Expanded(
+                          child: _HazardStatPill(
+                            label: 'Hazards Reported',
+                            count: '1',
+                            color: AppColors.amber,
+                          ),
+                        ),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: _HazardStatPill(
+                            label: 'Hazards Confirmed',
+                            count: '2',
+                            color: AppColors.verified,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
                     const _ImpactRow(
                       icon: Icons.warning_amber_rounded,
                       title: 'Hazards Warned Ahead',
                       value: '2 alerts',
-                      subtitle: 'Pothole on Tonk Rd + Risk Zone at Sitapura',
+                      subtitle: 'Pothole on Tonk Rd + Phase 3 Risk Zone at Sitapura',
                     ),
                     const Divider(color: AppColors.border, height: 20),
                     const _ImpactRow(
                       icon: Icons.how_to_vote_outlined,
                       title: 'Consensus Confirmations',
-                      value: '1 verified',
-                      subtitle: 'Confirmed pothole still present',
+                      value: '2 verified',
+                      subtitle: 'Pothole & Speed Breaker consensus confirmed',
                     ),
                     const Divider(color: AppColors.border, height: 20),
                     const _ImpactRow(
                       icon: Icons.sensors_outlined,
                       title: 'Phase 3 Telemetry Points',
                       value: '42 samples',
-                      subtitle: 'Anonymised accelerometer & GPS streamed',
+                      subtitle: 'Anonymised accelerometer & GPS streamed to BigQuery',
                     ),
                   ],
                 ),
@@ -285,6 +317,49 @@ class _ImpactRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _HazardStatPill extends StatelessWidget {
+  const _HazardStatPill({
+    required this.label,
+    required this.count,
+    required this.color,
+  });
+
+  final String label;
+  final String count;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(0.5)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: AppTypography.caption.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          Text(
+            count,
+            style: AppTypography.heading3.copyWith(
+              color: color,
+              fontSize: 18,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
