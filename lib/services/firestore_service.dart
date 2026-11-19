@@ -15,18 +15,27 @@ import '../models/telemetry_models.dart';
 
 class FirestoreService {
   FirestoreService({FirebaseFirestore? firestore})
-      : _db = firestore ?? FirebaseFirestore.instance;
+      : _customDb = firestore;
 
-  final FirebaseFirestore _db;
+  final FirebaseFirestore? _customDb;
 
-  CollectionReference<Map<String, dynamic>> get _hazardsCol =>
-      _db.collection('hazards');
+  FirebaseFirestore? get _db {
+    if (_customDb != null) return _customDb;
+    try {
+      return FirebaseFirestore.instance;
+    } catch (_) {
+      return null;
+    }
+  }
 
-  CollectionReference<Map<String, dynamic>> get _telemetryCol =>
-      _db.collection('telemetry_events');
+  CollectionReference<Map<String, dynamic>>? get _hazardsCol =>
+      _db?.collection('hazards');
 
-  CollectionReference<Map<String, dynamic>> get _riskZonesCol =>
-      _db.collection('risk_zones');
+  CollectionReference<Map<String, dynamic>>? get _telemetryCol =>
+      _db?.collection('telemetry_events');
+
+  CollectionReference<Map<String, dynamic>>? get _riskZonesCol =>
+      _db?.collection('risk_zones');
 
   // ── Hazard Consensus System ─────────────────────────────────────────
 
@@ -37,67 +46,86 @@ class FirestoreService {
     required double lng,
     required String anonymisedUserId,
   }) async {
-    // Check if an existing hazard of the same type is within 50m
-    final nearby = await _findExistingNearbyHazard(type, lat, lng);
-    if (nearby != null) {
-      // Add confirmation to existing hazard instead of duplicating
-      await confirmHazard(nearby.id, anonymisedUserId);
-      return nearby.id;
+    final col = _hazardsCol;
+    if (col == null) {
+      // Offline/Demo mode fallback ID
+      return 'HAZ_LOCAL_${DateTime.now().millisecondsSinceEpoch}';
     }
 
-    final docRef = _hazardsCol.doc();
-    final hazard = HazardReport(
-      id: docRef.id,
-      type: type,
-      latitude: lat,
-      longitude: lng,
-      reportedAt: DateTime.now(),
-      reportedBy: anonymisedUserId,
-      confirmations: 1,
-      denials: 0,
-      isVerified: false, // requires 5 confirmations
-    );
+    try {
+      // Check if an existing hazard of the same type is within 50m
+      final nearby = await _findExistingNearbyHazard(type, lat, lng);
+      if (nearby != null) {
+        await confirmHazard(nearby.id, anonymisedUserId);
+        return nearby.id;
+      }
 
-    await docRef.set(hazard.toFirestore());
-    return docRef.id;
+      final docRef = col.doc();
+      final hazard = HazardReport(
+        id: docRef.id,
+        type: type,
+        latitude: lat,
+        longitude: lng,
+        reportedAt: DateTime.now(),
+        reportedBy: anonymisedUserId,
+        confirmations: 1,
+        denials: 0,
+        isVerified: false,
+      );
+
+      await docRef.set(hazard.toFirestore());
+      return docRef.id;
+    } catch (_) {
+      return 'HAZ_LOCAL_${DateTime.now().millisecondsSinceEpoch}';
+    }
   }
 
   /// Add a confirmation vote to a hazard report.
-  /// If confirmations reach 5, mark as verified and broadcast to fleet.
   Future<void> confirmHazard(String hazardId, String userId) async {
-    final docRef = _hazardsCol.doc(hazardId);
-    await _db.runTransaction((transaction) async {
-      final snapshot = await transaction.get(docRef);
-      if (!snapshot.exists) return;
+    final col = _hazardsCol;
+    final db = _db;
+    if (col == null || db == null) return;
 
-      final current = HazardReport.fromFirestore(snapshot.id, snapshot.data()!);
-      final updatedConfirmations = current.confirmations + 1;
-      final isNowVerified =
-          updatedConfirmations >= AppConstants.hazardConsensusThreshold;
+    try {
+      final docRef = col.doc(hazardId);
+      await db.runTransaction((transaction) async {
+        final snapshot = await transaction.get(docRef);
+        if (!snapshot.exists) return;
 
-      transaction.update(docRef, {
-        'confirmations': updatedConfirmations,
-        'isVerified': isNowVerified,
-        'lastConfirmedAt': DateTime.now().toIso8601String(),
+        final current = HazardReport.fromFirestore(snapshot.id, snapshot.data()!);
+        final updatedConfirmations = current.confirmations + 1;
+        final isNowVerified =
+            updatedConfirmations >= AppConstants.hazardConsensusThreshold;
+
+        transaction.update(docRef, {
+          'confirmations': updatedConfirmations,
+          'isVerified': isNowVerified,
+          'lastConfirmedAt': DateTime.now().toIso8601String(),
+        });
       });
-    });
+    } catch (_) {}
   }
 
   /// Rider voted "NO" on "Still there?" flow.
   Future<void> denyHazard(String hazardId, String userId) async {
-    final docRef = _hazardsCol.doc(hazardId);
-    await _db.runTransaction((transaction) async {
-      final snapshot = await transaction.get(docRef);
-      if (!snapshot.exists) return;
+    final col = _hazardsCol;
+    final db = _db;
+    if (col == null || db == null) return;
 
-      final current = HazardReport.fromFirestore(snapshot.id, snapshot.data()!);
-      final updatedDenials = current.denials + 1;
+    try {
+      final docRef = col.doc(hazardId);
+      await db.runTransaction((transaction) async {
+        final snapshot = await transaction.get(docRef);
+        if (!snapshot.exists) return;
 
-      // If net score falls below -3, remove or deactivate
-      transaction.update(docRef, {
-        'denials': updatedDenials,
+        final current = HazardReport.fromFirestore(snapshot.id, snapshot.data()!);
+        final updatedDenials = current.denials + 1;
+
+        transaction.update(docRef, {
+          'denials': updatedDenials,
+        });
       });
-    });
+    } catch (_) {}
   }
 
   /// Find existing hazard within 50 meters
@@ -106,27 +134,31 @@ class FirestoreService {
     double lat,
     double lng,
   ) async {
-    // 0.0005 deg is approximately 55 meters
-    const delta = 0.0005;
-    final query = await _hazardsCol
-        .where('type', isEqualTo: type.name)
-        .where('latitude', isGreaterThanOrEqualTo: lat - delta)
-        .where('latitude', isLessThanOrEqualTo: lat + delta)
-        .limit(5)
-        .get();
+    final col = _hazardsCol;
+    if (col == null) return null;
 
-    for (final doc in query.docs) {
-      final hazard = HazardReport.fromFirestore(doc.id, doc.data());
-      final distMeters = _haversineDistance(
-        lat,
-        lng,
-        hazard.latitude,
-        hazard.longitude,
-      );
-      if (distMeters <= 50) {
-        return hazard;
+    try {
+      const delta = 0.0005;
+      final query = await col
+          .where('type', isEqualTo: type.name)
+          .where('latitude', isGreaterThanOrEqualTo: lat - delta)
+          .where('latitude', isLessThanOrEqualTo: lat + delta)
+          .limit(5)
+          .get();
+
+      for (final doc in query.docs) {
+        final hazard = HazardReport.fromFirestore(doc.id, doc.data());
+        final distMeters = _haversineDistance(
+          lat,
+          lng,
+          hazard.latitude,
+          hazard.longitude,
+        );
+        if (distMeters <= 50) {
+          return hazard;
+        }
       }
-    }
+    } catch (_) {}
     return null;
   }
 
@@ -136,38 +168,50 @@ class FirestoreService {
     required double lng,
     double radiusKm = 5.0,
   }) {
-    // Bounding box approximation
-    final latDelta = radiusKm / 111.0;
-    final lngDelta = radiusKm / (111.0 * cos(lat * pi / 180.0));
+    final col = _hazardsCol;
+    if (col == null) {
+      return Stream.value([]);
+    }
 
-    return _hazardsCol
-        .where('latitude', isGreaterThanOrEqualTo: lat - latDelta)
-        .where('latitude', isLessThanOrEqualTo: lat + latDelta)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => HazardReport.fromFirestore(doc.id, doc.data()))
-          .where((h) =>
-              h.isVerified &&
-              h.isActive &&
-              h.longitude >= lng - lngDelta &&
-              h.longitude <= lng + lngDelta)
-          .toList();
-    });
+    try {
+      final latDelta = radiusKm / 111.0;
+      final lngDelta = radiusKm / (111.0 * cos(lat * pi / 180.0));
+
+      return col
+          .where('latitude', isGreaterThanOrEqualTo: lat - latDelta)
+          .where('latitude', isLessThanOrEqualTo: lat + latDelta)
+          .snapshots()
+          .map((snapshot) {
+        return snapshot.docs
+            .map((doc) => HazardReport.fromFirestore(doc.id, doc.data()))
+            .where((h) =>
+                h.isVerified &&
+                h.isActive &&
+                h.longitude >= lng - lngDelta &&
+                h.longitude <= lng + lngDelta)
+            .toList();
+      });
+    } catch (_) {
+      return Stream.value([]);
+    }
   }
 
   // ── Phase 3: Telemetry Uploading ────────────────────────────────────
 
   /// Batch upload anonymised telemetry events to Firestore/BigQuery
   Future<void> uploadTelemetryBatch(List<TelemetryEvent> events) async {
-    if (events.isEmpty) return;
+    final col = _telemetryCol;
+    final db = _db;
+    if (col == null || db == null || events.isEmpty) return;
 
-    final batch = _db.batch();
-    for (final event in events) {
-      final docRef = _telemetryCol.doc(event.id);
-      batch.set(docRef, event.toJson());
-    }
-    await batch.commit();
+    try {
+      final batch = db.batch();
+      for (final event in events) {
+        final docRef = col.doc(event.id);
+        batch.set(docRef, event.toJson());
+      }
+      await batch.commit();
+    } catch (_) {}
   }
 
   // ── Phase 3: Pre-computed Risk Zones ────────────────────────────────

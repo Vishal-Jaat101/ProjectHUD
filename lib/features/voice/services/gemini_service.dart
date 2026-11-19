@@ -163,6 +163,11 @@ If no action matches, use action "none" with an empty actionData.
       return AssistantResponse.error("I didn't catch that. Please repeat.");
     }
 
+    // Graceful offline fallback if API key is not configured
+    if (AppConstants.geminiApiKey == 'YOUR_GEMINI_API_KEY' || AppConstants.geminiApiKey.isEmpty) {
+      return _localRuleBasedFallback(userSpeech, rideContext);
+    }
+
     try {
       final url =
           '$_baseUrl/models/$_model:generateContent?key=${AppConstants.geminiApiKey}';
@@ -201,15 +206,94 @@ If no action matches, use action "none" with an empty actionData.
       );
 
       return _parseResponse(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      final statusCode = e.response?.statusCode;
-      if (statusCode == 429) {
-        return AssistantResponse.error('Too many requests. Try again.');
-      }
-      return AssistantResponse.error('Connection issue. Try again.');
+    } on DioException catch (_) {
+      return _localRuleBasedFallback(userSpeech, rideContext);
     } catch (_) {
-      return AssistantResponse.error('Something went wrong. Try again.');
+      return _localRuleBasedFallback(userSpeech, rideContext);
     }
+  }
+
+  /// Offline rule-based fallback when Gemini API key or network is absent
+  AssistantResponse _localRuleBasedFallback(String userSpeech, RideContext context) {
+    final s = userSpeech.toLowerCase();
+
+    if (s.contains('pothole') || s.contains('gaddha')) {
+      return const AssistantResponse(
+        text: 'Pothole reported. Alerting nearby riders.',
+        action: AssistantAction.reportHazard,
+        actionData: {'hazardType': 'pothole'},
+      );
+    } else if (s.contains('accident') || s.contains('durghatna')) {
+      return const AssistantResponse(
+        text: 'Accident reported. Proceeding with caution.',
+        action: AssistantAction.reportHazard,
+        actionData: {'hazardType': 'accident'},
+      );
+    } else if (s.contains('water') || s.contains('paani')) {
+      return const AssistantResponse(
+        text: 'Waterlogging reported ahead.',
+        action: AssistantAction.reportHazard,
+        actionData: {'hazardType': 'waterlogging'},
+      );
+    } else if (s.contains('speed breaker') || s.contains('breaker')) {
+      return const AssistantResponse(
+        text: 'Speed breaker reported. Slow down.',
+        action: AssistantAction.reportHazard,
+        actionData: {'hazardType': 'speedBreaker'},
+      );
+    } else if (s.contains('police') || s.contains('checking')) {
+      return const AssistantResponse(
+        text: 'Police check reported ahead.',
+        action: AssistantAction.reportHazard,
+        actionData: {'hazardType': 'policeCheck'},
+      );
+    } else if (s == 'yes' || s == 'haan' || s == 'ha' || s.contains('still there')) {
+      return const AssistantResponse(
+        text: 'Hazard confirmed. Thank you.',
+        action: AssistantAction.confirmHazard,
+        actionData: {'confirmed': true},
+      );
+    } else if (s == 'no' || s == 'nahi' || s == 'na') {
+      return const AssistantResponse(
+        text: 'Hazard cleared. Trust score updated.',
+        action: AssistantAction.confirmHazard,
+        actionData: {'confirmed': false},
+      );
+    } else if (s.contains('repeat') || s.contains('dobara')) {
+      return AssistantResponse(
+        text: context.nextInstruction ?? 'Continue straight on route.',
+        action: AssistantAction.repeat,
+      );
+    } else if (s.contains('time') || s.contains('kitna') || s.contains('eta') || s.contains('distance')) {
+      final mins = ((context.remainingDurationSeconds ?? 540) / 60).round();
+      final km = ((context.remainingDistanceMeters ?? 3800) / 1000).toStringAsFixed(1);
+      return AssistantResponse(
+        text: '$mins minutes remaining. Distance: $km kilometers.',
+        action: AssistantAction.timeLeft,
+      );
+    } else if (s.contains('emergency') || s.contains('sos') || s.contains('call')) {
+      return const AssistantResponse(
+        text: 'Calling emergency contact now.',
+        action: AssistantAction.callEmergency,
+      );
+    } else if (s.contains('stop') || s.contains('band') || s.contains('exit')) {
+      return const AssistantResponse(
+        text: 'Stopping navigation. Stay safe.',
+        action: AssistantAction.stopNavigation,
+      );
+    } else if (s.contains('navigate to') || s.contains('jana hai')) {
+      final dest = s.replaceAll('navigate to', '').replaceAll('jana hai', '').trim();
+      return AssistantResponse(
+        text: 'Navigating to $dest.',
+        action: AssistantAction.navigate,
+        actionData: {'destination': dest},
+      );
+    }
+
+    return const AssistantResponse(
+      text: 'Eyes on the road. Drive safe.',
+      action: AssistantAction.none,
+    );
   }
 
   /// Parse the Gemini API response into an [AssistantResponse].

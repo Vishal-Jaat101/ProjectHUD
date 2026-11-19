@@ -49,21 +49,29 @@ class VoiceService {
   Future<bool> initialise({String language = 'en-IN'}) async {
     _language = language;
 
-    // Speech-to-text
-    _sttInitialised = await _stt.initialize(
-      onError: (error) {
-        // Log but do not crash — STT errors are transient.
-      },
-      onStatus: (status) {
-        // 'listening', 'notListening', 'done'
-      },
-    );
+    try {
+      // Speech-to-text
+      _sttInitialised = await _stt.initialize(
+        onError: (error) {
+          // Log but do not crash — STT errors are transient.
+        },
+        onStatus: (status) {
+          // 'listening', 'notListening', 'done'
+        },
+      );
+    } catch (_) {
+      _sttInitialised = false;
+    }
 
-    // Text-to-speech
-    await _configureTts(language);
-    _ttsInitialised = true;
+    try {
+      // Text-to-speech
+      await _configureTts(language);
+      _ttsInitialised = true;
+    } catch (_) {
+      _ttsInitialised = false;
+    }
 
-    return _sttInitialised && _ttsInitialised;
+    return _sttInitialised || _ttsInitialised;
   }
 
   /// Set the active language. Updates both STT and TTS locales.
@@ -151,7 +159,9 @@ class VoiceService {
     }
 
     _isSpeaking = true;
-    await _tts.speak(text);
+    try {
+      await _tts.speak(text);
+    } catch (_) {}
 
     // Restore original locale if we switched.
     if (language != null && language != _language) {

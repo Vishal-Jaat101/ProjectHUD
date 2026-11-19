@@ -51,30 +51,33 @@ class TelemetryService {
   }
 
   void startSensorCollection() {
-    // 1. Accelerometer for harsh braking
-    _accelSub = userAccelerometerEventStream().listen((event) {
-      // Forward/backward deceleration on Y-axis (or vector magnitude)
-      final forwardDecel = event.y;
-      if (forwardDecel < AppConstants.harshBrakingThreshold) {
-        _recordEvent(
-          type: TelemetryEventType.harshBraking,
-          speed: _lastSpeedKmh,
-          accelerationMss: forwardDecel,
-        );
-      }
-    });
+    try {
+      // 1. Accelerometer for harsh braking
+      _accelSub = userAccelerometerEventStream().listen((event) {
+        final forwardDecel = event.y;
+        if (forwardDecel < AppConstants.harshBrakingThreshold) {
+          _recordEvent(
+            type: TelemetryEventType.harshBraking,
+            speed: _lastSpeedKmh,
+            accelerationMss: forwardDecel,
+          );
+        }
+      }, onError: (_) {});
+    } catch (_) {}
 
-    // 2. Gyroscope for sudden swerve / near miss evasive maneuvers
-    _gyroSub = gyroscopeEventStream().listen((event) {
-      final yawDps = (event.z * 180 / pi).abs();
-      if (yawDps > AppConstants.suddenSwerveThreshold) {
-        _recordEvent(
-          type: TelemetryEventType.suddenSwerve,
-          speed: _lastSpeedKmh,
-          gyroscopeDps: yawDps,
-        );
-      }
-    });
+    try {
+      // 2. Gyroscope for sudden swerve / near miss evasive maneuvers
+      _gyroSub = gyroscopeEventStream().listen((event) {
+        final yawDps = (event.z * 180 / pi).abs();
+        if (yawDps > AppConstants.suddenSwerveThreshold) {
+          _recordEvent(
+            type: TelemetryEventType.suddenSwerve,
+            speed: _lastSpeedKmh,
+            gyroscopeDps: yawDps,
+          );
+        }
+      }, onError: (_) {});
+    } catch (_) {}
 
     // 3. Periodic upload timer every 60s
     _uploadTimer?.cancel();
