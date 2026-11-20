@@ -141,6 +141,8 @@ class BLEPacket {
 
   final TelemetryEventType? activeHazardType;
 
+  const BLEPacket({this.activeHazardType});
+  
   // This is documented in the BLE packet spec.
   // See hud_device/docs/ble_packet_format.md for full documentation.
 }
