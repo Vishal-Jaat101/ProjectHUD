@@ -32,10 +32,18 @@ gradle.beforeProject { subproject ->
                 }
             }
         }
-            // Some plugins mix Java and Kotlin JVM targets (for example
-        // receive_sharing_intent compiles Java as 1.8 and Kotlin as 17),
-        // which the Kotlin Gradle plugin rejects. Align the Kotlin target
-        // to whatever Java target the plugin itself uses.
+    }
+}
+
+// Some plugins mix Java and Kotlin JVM targets (for example
+// receive_sharing_intent compiles Java as 1.8 and Kotlin as 17), which the
+// Kotlin Gradle plugin rejects. Align the Kotlin target to whatever Java
+// target the plugin itself uses. This runs in projectsEvaluated because
+// some plugins (for example cloud_firestore) only finalize their Java
+// settings after evaluation.
+gradle.projectsEvaluated {
+    rootProject.allprojects { subproject ->
+        def androidExt = subproject.extensions.findByName('android')
         if (androidExt != null) {
             def javaTarget = androidExt.compileOptions.targetCompatibility.toString()
             subproject.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach { kotlinTask ->
