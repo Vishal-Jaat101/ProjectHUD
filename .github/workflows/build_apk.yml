@@ -30,10 +30,6 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Ensure Android platform wrapper files
-        run: |
-          flutter create . --platforms=android --project-name project_hud
-
       - name: Install Dependencies
         run: |
           flutter pub get
