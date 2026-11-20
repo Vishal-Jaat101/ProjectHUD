@@ -16,3 +16,21 @@ subprojects {
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
+
+// Plugins that predate AGP 8 (for example uni_links) do not declare a
+// namespace in their build file, which AGP 8+ requires. Fill any missing
+// namespace from the plugin's own AndroidManifest package attribute.
+subprojects {
+    afterEvaluate { subproject ->
+        def androidExt = subproject.extensions.findByName('android')
+        if (androidExt != null && androidExt.namespace == null) {
+            def manifestFile = subproject.file('src/main/AndroidManifest.xml')
+            if (manifestFile.exists()) {
+                def pkg = new XmlParser().parse(manifestFile).attribute('package')
+                if (pkg != null) {
+                    androidExt.namespace = pkg.toString()
+                }
+            }
+        }
+    }
+}
