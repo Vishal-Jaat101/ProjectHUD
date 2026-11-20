@@ -20,8 +20,8 @@ tasks.register("clean", Delete) {
 // Plugins that predate AGP 8 (for example uni_links) do not declare a
 // namespace in their build file, which AGP 8+ requires. Fill any missing
 // namespace from the plugin's own AndroidManifest package attribute.
-subprojects {
-    afterEvaluate { subproject ->
+gradle.beforeProject { subproject ->
+    subproject.afterEvaluate {
         def androidExt = subproject.extensions.findByName('android')
         if (androidExt != null && androidExt.namespace == null) {
             def manifestFile = subproject.file('src/main/AndroidManifest.xml')
