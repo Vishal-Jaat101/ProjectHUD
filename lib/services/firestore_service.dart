@@ -222,7 +222,9 @@ class FirestoreService {
     required double centerLng,
   }) async {
     try {
-      final snapshot = await _riskZonesCol.limit(50).get();
+      final col = _riskZonesCol;
+      if (col == null) return _getSeededJaipurRiskZones();
+      final snapshot = await col.limit(50).get();
       if (snapshot.docs.isNotEmpty) {
         return snapshot.docs.map((doc) {
           final data = doc.data();
